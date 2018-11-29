@@ -3,6 +3,17 @@ import numpy as np
 from tensorflow.contrib.rnn import LSTMCell, GRUCell
 import sys
 
+import numpy as np
+from sklearn.datasets import fetch_20newsgroups
+import unicodedata
+import gensim
+import string
+import re
+import collections
+import logging
+from matplotlib import pyplot as plt
+from sklearn.manifold import TSNE
+
 
 class character_rnn(object):
     '''
@@ -21,12 +32,29 @@ class character_rnn(object):
         train network on given text
     '''
 
-    def __init__(self, vocabulary, embeddings, seq_len=200, first_read=50, rnn_size=200):
+    def __init__(self, corpusfp, seq_len=200, first_read=50, rnn_size=200):
 
-        self.vocabulary = vocabulary
-        self.embeddings = embeddings
         self.seq_len = seq_len
         self.first_read = first_read
+
+        self.corpusfp = corpusfp
+        self.dataset = None
+        self.sentences = None
+
+        self.puncToTag = {'.' : ' <STOP>', '?' : ' <QUEST>', '!' : '<BANG>'}
+        self.tagToPunc = {'<STOP>' : '.', '<QUEST>' : '?', '<BANG>' : '!'}
+
+        # need to perform some preprocessing and do the embeddings
+        print "loading dataset"
+        with open(self.corpusfp, 'r') as f:
+            self.dataset = f.readlines()
+            self.dataset = ' '.join(self.dataset)
+
+        print "converting dataset to list of sentences"
+        self.sentences = re.sub(r'-\t\n', ' ', self.dataset)
+        sentences = sentences.split('.')
+        sentences = [sentence[1:].translate(None, string.punctuation).lower().split() for sentence in sentences]
+
 
         # dictionary of possible characters
         # self.chars = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
