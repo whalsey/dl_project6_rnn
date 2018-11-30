@@ -5,8 +5,6 @@ import sys
 
 from sklearn.neighbors import KNeighborsClassifier
 
-import numpy as np
-from sklearn.datasets import fetch_20newsgroups
 import unicodedata
 import gensim
 import string
@@ -22,7 +20,7 @@ def replaceAll(s, d):
 
     return s
 
-class character_rnn(object):
+class word_rnn(object):
     '''
     sample character-level RNN by Shang Gao
 
@@ -56,6 +54,9 @@ class character_rnn(object):
         with open(self.corpusfp, 'r') as f:
             self.dataset = f.readlines()
             self.dataset = ' '.join(self.dataset)
+            self.dataset = unicode(self.dataset, 'utf-8')
+
+        self.dataset = unicodedata.normalize('NFKD', self.dataset).encode('ascii', 'ignore')
 
         print "converting dataset to list of sentences"
         self.sentences = self.dataset.translate(None, '\t\n').lower()
@@ -69,35 +70,36 @@ class character_rnn(object):
         # remove any other punctuation and convert to lower
         self.sentences = [sentence[1:].translate(None, "!\"#$%&'()*+,-./:;=?@[\]^_`{|}~").split() for sentence in self.sentences]
 
-        self.model = gensim.models.Word2Vec(self.sentences, min_count=5, size=50, workers=4)
+        self.model = gensim.models.Word2Vec(self.sentences, min_count=5, size=200, workers=4)
 
+        # we have to have a way to recover the closest word to the ouput of the RNN
+        # we will do this with a 1-NN model trained on the embeddings of the entire vocabulary
         a = self.model.wv.vocab
-        # dictionary of possible characters
-        # self.chars = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
-        #               't', 'u', 'v', 'w', 'x', 'y', 'z', \
-        #               '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '.', ',', '!', '?', '(', ')', '\'', '"',
-        #               ' ']
-        # self.num_chars = len(self.chars)
 
-        self.num_words = len(self.vocabulary)
+        X = []
+        y = []
+        for el in a:
+            X.append(self.model[el])
+            y.append(el)
 
-        # dictionary mapping characters to indices
-        self.word2idx = {word: i for (i, word) in enumerate(self.vocabulary)}
-        self.idx2word = {i: word for (i, word) in enumerate(self.vocabulary)}
+        X = np.array(X)
+        y = np.array(y)
+
+        self.knn = KNeighborsClassifier(n_neighbors=1)
+        self.knn.fit(X, y)
+
+        self.num_words = len(a)
 
         '''
         #training portion of language model
         '''
 
-        # input sequence of character indices
-        self.input = tf.placeholder(tf.int32, [1, seq_len])
-
-        # convert to one hot
-        one_hot = tf.one_hot(self.input, self.num_words)
+        # input sequence of word embeddings
+        self.input = tf.placeholder(tf.float32, [200, self.seq_len])
 
         # rnn layer
         self.gru = GRUCell(rnn_size)
-        outputs, states = tf.nn.dynamic_rnn(self.gru, one_hot, sequence_length=[self.seq_len], dtype=tf.float32)
+        outputs, states = tf.nn.dynamic_rnn(self.gru, self.input, sequence_length=[self.seq_len], dtype=tf.float32)
         outputs = tf.squeeze(outputs, [0])
 
         # ignore all outputs during first read steps
@@ -105,12 +107,13 @@ class character_rnn(object):
 
         # softmax logit to predict next character (actual softmax is applied in cross entropy function)
         logits = tf.layers.dense(outputs, self.num_words, None, True, tf.orthogonal_initializer(), name='dense')
+        activation = tf.nn.tanh(logits)
 
         # target character at each step (after first read chars) is following character
-        targets = one_hot[0, first_read + 1:]
+        targets = self.input[:, first_read + 1:]
 
         # loss and train functions
-        self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=targets))
+        self.loss = tf.reduce_mean(tf.pow(activation-targets, 2))
         self.optimizer = tf.train.AdamOptimizer(0.0002, 0.9, 0.999).minimize(self.loss)
 
         '''
@@ -119,7 +122,7 @@ class character_rnn(object):
 
         # use output and state from last word in training sequence
         state = tf.expand_dims(states[-1], 0)
-        output = one_hot[:, -1]
+        output = self.input[:, -1]
 
         # save predicted characters to list
         self.predictions = []
@@ -131,14 +134,16 @@ class character_rnn(object):
             logits = tf.layers.dense(output, self.num_words, None, True, tf.orthogonal_initializer(), name='dense',
                                      reuse=True)
 
+            activation = tf.nn.tanh(logits)
+
             # get index of most probable character
-            output = tf.argmax(tf.nn.softmax(logits), 1)
+            output = self.knn.predict(np.array([activation]))
 
             # save predicted character to list
             self.predictions.append(output)
 
             # one hot and cast to float for GRU API
-            output = tf.cast(tf.one_hot(output, self.num_words), tf.float32)
+            output = activation
 
         # init op
         self.sess = tf.Session()
@@ -159,18 +164,18 @@ class character_rnn(object):
         '''
 
         # convert characters to indices
-        print "converting text in indices"
-        text_indices = [self.word2idx[char] for char in text if char in self.word2idx]
+        print "converting text to embeddings"
+        embeddings = [self.model[word] for word in text.split(' ')]
 
         # get length of text
-        text_len = len(text_indices)
+        text_len = len(embeddings)
 
         # train
         for i in range(iterations):
 
             # select random starting point in text
             start = np.random.randint(text_len - self.seq_len)
-            sequence = text_indices[start:start + self.seq_len]
+            sequence = embeddings[start:start + self.seq_len]
 
             # train
             feed_dict = {self.input: [sequence]}
@@ -182,7 +187,7 @@ class character_rnn(object):
             if (i + 1) % 100 == 0:
                 feed_dict = {self.input: [sequence]}
                 pred = self.sess.run(self.predictions, feed_dict=feed_dict)
-                sample = ''.join([self.idx2char[idx[0]] for idx in pred])
+                sample = ''.join(pred)
                 print "iteration %i generated sample: %s" % (i + 1, sample)
 
 
@@ -199,5 +204,5 @@ if __name__ == "__main__":
     text = text.lower()  # lowercase
 
     # train rnn
-    rnn = character_rnn('corpus-large.txt')
+    rnn = word_rnn('corpus-large.txt')
     rnn.train(text)
