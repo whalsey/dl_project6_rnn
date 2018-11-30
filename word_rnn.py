@@ -108,11 +108,11 @@ class word_rnn(object):
         outputs = outputs[first_read:-1]
 
         # softmax logit to predict next character (actual softmax is applied in cross entropy function)
-        logits = tf.layers.dense(outputs, self.num_words, None, True, tf.orthogonal_initializer(), name='dense')
+        logits = tf.layers.dense(outputs, self.seq_len, None, True, tf.orthogonal_initializer(), name='dense')
         activation = tf.nn.tanh(logits)
 
         # target character at each step (after first read chars) is following character
-        targets = self.input[:, first_read + 1:]
+        targets = self.input[:, :, first_read + 1:]
 
         # loss and train functions
         self.loss = tf.reduce_mean(tf.pow(activation-targets, 2))
@@ -133,7 +133,7 @@ class word_rnn(object):
         for i in range(100):
             # run GRU cell and softmax
             output, state = self.gru(output, state)
-            logits = tf.layers.dense(output, self.num_words, None, True, tf.orthogonal_initializer(), name='dense',
+            logits = tf.layers.dense(output, self.seq_len, None, True, tf.orthogonal_initializer(), name='dense',
                                      reuse=True)
 
             activation = tf.nn.tanh(logits)
