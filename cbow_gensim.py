@@ -11,24 +11,40 @@ import logging
 from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
 
+from string import maketrans   # Required to call maketrans function.
+
+
+def replaceAll(s, d):
+    for k, v in d:
+        s = s.replace(k, v)
+
+    return s
+
 #logging setup
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
 #load 20 newsgroups dataset
 print "loading dataset"
-# with open("corpus-large.txt", 'r') as f:
-#     dataset = f.readlines()
-#     dataset = ' '.join(dataset)
+with open("corpus-large.txt", 'r') as f:
+    dataset = f.readlines()
+    dataset = ' '.join(dataset)
 
-dataset = fetch_20newsgroups(subset='all',remove=('headers', 'footers', 'quotes')).data
-dataset = ' '.join(dataset)
-dataset = unicodedata.normalize('NFKD', dataset).encode('ascii','ignore')
+# dataset = fetch_20newsgroups(subset='all',remove=('headers', 'footers', 'quotes')).data
+# dataset = ' '.join(dataset)
+# dataset = unicodedata.normalize('NFKD', dataset).encode('ascii','ignore')
 
 #convert dataset to list of sentences
 print "converting dataset to list of sentences"
-sentences = re.sub(r'-\t\n', ' ', dataset)
+puncToTag = [('.', ' <STOP>.'), ('?', ' <QUEST>.'), ('!', ' <BANG>.')]
+tagToPunc = [('<STOP>', '.'), ('<QUEST>', '?'), ('<BANG>', '!')]
+
+sentences = dataset.translate(None, '\t\n').lower()
+
+# convert sentence-ending punctuation to words and append a '.' to each
+sentences = replaceAll(sentences, puncToTag)
+
 sentences = sentences.split('.')
-sentences = [sentence[1:].translate(None, string.punctuation).lower().split() for sentence in sentences]
+sentences = [sentence[1:].translate(None, "!\"#$%&'()*+,-./:;=?@[\]^_`{|}~").split() for sentence in sentences]
 
 #train word2vec
 print "training word2vec"

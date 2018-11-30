@@ -3,6 +3,8 @@ import numpy as np
 from tensorflow.contrib.rnn import LSTMCell, GRUCell
 import sys
 
+from sklearn.neighbors import KNeighborsClassifier
+
 import numpy as np
 from sklearn.datasets import fetch_20newsgroups
 import unicodedata
@@ -14,6 +16,11 @@ import logging
 from matplotlib import pyplot as plt
 from sklearn.manifold import TSNE
 
+def replaceAll(s, d):
+    for k, v in d:
+        s = s.replace(k, v)
+
+    return s
 
 class character_rnn(object):
     '''
@@ -41,8 +48,8 @@ class character_rnn(object):
         self.dataset = None
         self.sentences = None
 
-        self.puncToTag = {'.' : ' <STOP>', '?' : ' <QUEST>', '!' : '<BANG>'}
-        self.tagToPunc = {'<STOP>' : '.', '<QUEST>' : '?', '<BANG>' : '!'}
+        self.puncToTag = [('.', ' <STOP>.'), ('?', ' <QUEST>.'), ('!', ' <BANG>.')]
+        self.tagToPunc = [('<STOP>', '.'), ('<QUEST>', '?'), ('<BANG>', '!')]
 
         # need to perform some preprocessing and do the embeddings
         print "loading dataset"
@@ -51,11 +58,20 @@ class character_rnn(object):
             self.dataset = ' '.join(self.dataset)
 
         print "converting dataset to list of sentences"
-        self.sentences = re.sub(r'-\t\n', ' ', self.dataset)
-        sentences = sentences.split('.')
-        sentences = [sentence[1:].translate(None, string.punctuation).lower().split() for sentence in sentences]
+        self.sentences = self.dataset.translate(None, '\t\n').lower()
 
+        # convert sentence-ending punctuation to words and append a '.' to each
+        self.sentences = replaceAll(self.sentences, self.puncToTag)
 
+        # split the corpus into a list of sentences
+        self.sentences = self.sentences.split('.')
+
+        # remove any other punctuation and convert to lower
+        self.sentences = [sentence[1:].translate(None, "!\"#$%&'()*+,-./:;=?@[\]^_`{|}~").split() for sentence in self.sentences]
+
+        self.model = gensim.models.Word2Vec(self.sentences, min_count=5, size=50, workers=4)
+
+        a = self.model.wv.vocab
         # dictionary of possible characters
         # self.chars = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
         #               't', 'u', 'v', 'w', 'x', 'y', 'z', \
@@ -183,5 +199,5 @@ if __name__ == "__main__":
     text = text.lower()  # lowercase
 
     # train rnn
-    rnn = character_rnn()
+    rnn = character_rnn('corpus-large.txt')
     rnn.train(text)
