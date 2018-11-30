@@ -64,6 +64,8 @@ class word_rnn(object):
         # convert sentence-ending punctuation to words and append a '.' to each
         self.sentences = replaceAll(self.sentences, self.puncToTag)
 
+        self.dataset = self.sentences.translate(None, "!\"#$%&'()*+,-./:;=?@[\]^_`{|}~")
+
         # split the corpus into a list of sentences
         self.sentences = self.sentences.split('.')
 
