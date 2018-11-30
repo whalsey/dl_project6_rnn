@@ -110,15 +110,12 @@ class word_rnn(object):
 
         # softmax logit to predict next character (actual softmax is applied in cross entropy function)
         logits = tf.layers.dense(outputs, self.embedding_size, None, True, tf.orthogonal_initializer(), name='dense')
-        activation = tf.nn.tanh(logits)
-
-        # activation = activation[:, first_read + 1:]
 
         # target character at each step (after first read chars) is following character
         targets = self.input[0, first_read + 1:]
 
         # loss and train functions
-        self.loss = tf.reduce_mean(tf.pow(activation-targets, 2))
+        self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=targets))
         self.optimizer = tf.train.AdamOptimizer(0.0002, 0.9, 0.999).minimize(self.loss)
 
         '''
@@ -168,6 +165,13 @@ class word_rnn(object):
         # convert characters to indices
         print "converting text to embeddings"
         embeddings = [self.model[word] for word in text.split(' ') if word in self.model.wv.vocab]
+
+        # scale embeddings to between 0 and 1
+        tmp = np.array(embeddings)
+        max_t = tmp.max()
+        min_t = tmp.min()
+
+        embeddings = (tmp - min_t) / (max_t - min_t)
 
         # get length of text
         text_len = len(embeddings)
