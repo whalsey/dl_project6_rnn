@@ -37,10 +37,11 @@ class word_rnn(object):
         train network on given text
     '''
 
-    def __init__(self, corpusfp, seq_len=200, first_read=50, rnn_size=200):
+    def __init__(self, corpusfp, seq_len=200, first_read=50, rnn_size=200, embedding_size = 500):
 
         self.seq_len = seq_len
         self.first_read = first_read
+        self.embedding_size = embedding_size
 
         self.corpusfp = corpusfp
         self.dataset = None
@@ -72,7 +73,7 @@ class word_rnn(object):
         # remove any other punctuation and convert to lower
         self.sentences = [sentence[1:].translate(None, "!\"#$%&'()*+,-./:;=?@[\]^_`{|}~").split() for sentence in self.sentences]
 
-        self.model = gensim.models.Word2Vec(self.sentences, min_count=5, size=200, workers=4)
+        self.model = gensim.models.Word2Vec(self.sentences, min_count=5, size=self.embedding_size, workers=4)
 
         # we have to have a way to recover the closest word to the ouput of the RNN
         # we will do this with a 1-NN model trained on the embeddings of the entire vocabulary
@@ -97,7 +98,7 @@ class word_rnn(object):
         '''
 
         # input sequence of word embeddings
-        self.input = tf.placeholder(tf.float32, [200, self.seq_len])
+        self.input = tf.placeholder(tf.float32, [1, self.seq_len, self.embedding_size])
 
         # rnn layer
         self.gru = GRUCell(rnn_size)
@@ -108,11 +109,13 @@ class word_rnn(object):
         outputs = outputs[first_read:-1]
 
         # softmax logit to predict next character (actual softmax is applied in cross entropy function)
-        logits = tf.layers.dense(outputs, self.seq_len, None, True, tf.orthogonal_initializer(), name='dense')
+        logits = tf.layers.dense(outputs, self.embedding_size, None, True, tf.orthogonal_initializer(), name='dense')
         activation = tf.nn.tanh(logits)
 
+        # activation = activation[:, first_read + 1:]
+
         # target character at each step (after first read chars) is following character
-        targets = self.input[:, :, first_read + 1:]
+        targets = self.input[0, first_read + 1:]
 
         # loss and train functions
         self.loss = tf.reduce_mean(tf.pow(activation-targets, 2))
@@ -133,16 +136,13 @@ class word_rnn(object):
         for i in range(100):
             # run GRU cell and softmax
             output, state = self.gru(output, state)
-            logits = tf.layers.dense(output, self.seq_len, None, True, tf.orthogonal_initializer(), name='dense',
+            logits = tf.layers.dense(output, self.embedding_size, None, True, tf.orthogonal_initializer(), name='dense',
                                      reuse=True)
 
             activation = tf.nn.tanh(logits)
 
-            # get index of most probable character
-            output = self.knn.predict(np.array([activation]))
-
             # save predicted character to list
-            self.predictions.append(output)
+            self.predictions.append(activation)
 
             # one hot and cast to float for GRU API
             output = activation
@@ -167,7 +167,7 @@ class word_rnn(object):
 
         # convert characters to indices
         print "converting text to embeddings"
-        embeddings = [self.model[word] for word in text.split(' ')]
+        embeddings = [self.model[word] for word in text.split(' ') if word in self.model.wv.vocab]
 
         # get length of text
         text_len = len(embeddings)
@@ -189,8 +189,10 @@ class word_rnn(object):
             if (i + 1) % 100 == 0:
                 feed_dict = {self.input: [sequence]}
                 pred = self.sess.run(self.predictions, feed_dict=feed_dict)
-                sample = ''.join(pred)
-                print "iteration %i generated sample: %s" % (i + 1, sample)
+                pred = [q[0] for q in pred]
+                output = self.knn.predict(pred)
+                sample = ' '.join(output)
+                print "iteration {} generated sample: {}".format(i + 1, sample)
 
 
 if __name__ == "__main__":
