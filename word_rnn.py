@@ -148,7 +148,7 @@ class word_rnn(object):
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
 
-    def train(self, text, iterations=100000):
+    def train(self, iterations=100000):
         '''
         train network on given text
 
@@ -206,11 +206,6 @@ if __name__ == "__main__":
     with open('corpus-large.txt', 'r') as f:
         text = f.read()
 
-    # clean up text
-    text = text.replace("\n", " ")  # remove linebreaks
-    text = re.sub(' +', ' ', text)  # remove duplicate spaces
-    text = text.lower()  # lowercase
-
     # train rnn
     rnn = word_rnn('corpus-large.txt')
-    rnn.train(text)
+    rnn.train()
