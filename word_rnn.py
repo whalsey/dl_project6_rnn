@@ -116,7 +116,7 @@ class word_rnn(object):
 
         # loss and train functions
         self.loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=logits, labels=targets))
-        self.optimizer = tf.train.AdamOptimizer(0.0002, 0.9, 0.999).minimize(self.loss)
+        self.optimizer = tf.train.AdamOptimizer(0.00005, 0.9, 0.999).minimize(self.loss)
 
         '''
         #generation portion of language model
