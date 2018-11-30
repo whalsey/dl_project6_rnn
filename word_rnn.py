@@ -97,7 +97,7 @@ class word_rnn(object):
         '''
 
         # input sequence of word embeddings
-        self.input = tf.placeholder(tf.float32, [200, self.seq_len])
+        self.input = tf.placeholder(tf.float32, [1, 200, self.seq_len])
 
         # rnn layer
         self.gru = GRUCell(rnn_size)
@@ -151,7 +151,7 @@ class word_rnn(object):
         self.sess = tf.Session()
         self.sess.run(tf.global_variables_initializer())
 
-    def train(self, text, iterations=100000):
+    def train(self, iterations=100000):
         '''
         train network on given text
 
@@ -167,7 +167,7 @@ class word_rnn(object):
 
         # convert characters to indices
         print "converting text to embeddings"
-        embeddings = [self.model[word] for word in text.split(' ')]
+        embeddings = [[self.model[word] for word in self.dataset.split(' ')]]
 
         # get length of text
         text_len = len(embeddings)
@@ -200,11 +200,6 @@ if __name__ == "__main__":
     with open('corpus-large.txt', 'r') as f:
         text = f.read()
 
-    # clean up text
-    text = text.replace("\n", " ")  # remove linebreaks
-    text = re.sub(' +', ' ', text)  # remove duplicate spaces
-    text = text.lower()  # lowercase
-
     # train rnn
     rnn = word_rnn('corpus-large.txt')
-    rnn.train(text)
+    rnn.train()
